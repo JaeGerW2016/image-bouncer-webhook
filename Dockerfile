@@ -14,4 +14,4 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o image-bouncer .
 FROM alpine:3.10
 WORKDIR /
 COPY --from=builder /go/release/image-bouncer .
-ENTRYPOINT ["/dedicated-toleration"]
+ENTRYPOINT ["/image-bouncer"]
