@@ -197,8 +197,8 @@ func getInvalidContainerResponse(message string) *metav1.Status {
 }
 
 func main() {
-	flag.StringVar(&tlsCertFile, "tls-cert", "/etc/admission-controller/tls/tls.crt", "TLS Certificate File.")
-	flag.StringVar(&tlsKeyFile, "tls-key", "/etc/admission-controller/tls/tls.key", "TLS Key File.")
+	flag.StringVar(&tlsCertFile, "tls-cert", "/etc/admission-controller/tls/cert.pem", "TLS Certificate File.")
+	flag.StringVar(&tlsKeyFile, "tls-key", "/etc/admission-controller/tls/key.pem", "TLS Key File.")
 	flag.Parse()
 
 	http.HandleFunc("/ping", healthCheck)
