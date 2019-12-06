@@ -41,7 +41,7 @@ docker push 314315940/image-bouncer:v1.0
 ./deployment/patch-ca-bundle.sh
 ```
 
-### Deploy Tugger to Kubernetes
+### Deploy image-bouncer to Kubernetes
 
 * Deploy using kubectl
 ```bash
