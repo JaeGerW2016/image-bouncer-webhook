@@ -61,7 +61,7 @@ func validateAdmissionReviewHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	namespace := ar.Request.Namespace
-	log.Println("AdmissionReview Namespace: %s", namespace)
+	log.Printf("AdmissionReview Namespace: %s", namespace)
 
 	admissionResponse := v1beta1.AdmissionResponse{Allowed: true}
 	images := []string{}
