@@ -22,10 +22,10 @@ In addition, the `MutatingAdmissionWebhook` and `ValidatingAdmissionWebhook` adm
 
 ```bash
 # Build docker image
-docker build -t 314315940/image-bouncer:v1.0 .
+docker build -t 314315960/image-bouncer:v1.0 .
 
 # Push it to Docker Registry
-docker push 314315940/image-bouncer:v1.0
+docker push 314315960/image-bouncer:v1.0
 ```
 
 ### Generate TLS Certs for Tugger
