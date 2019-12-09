@@ -20,7 +20,8 @@ func IsUsingLatestTag(image string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return strings.HasSuffix(reference.TagNameOnly(named).String(), ":latest"), nil
+	str := reference.TagNameOnly(named).String()
+	return !strings.Contains(str,":") || strings.HasSuffix(str, ":latest"), nil
 }
 
 func IsFromWhiteListedRegistry(image string, whitelist []string) (bool, error) {
@@ -30,7 +31,7 @@ func IsFromWhiteListedRegistry(image string, whitelist []string) (bool, error) {
 	}
 	res := strings.SplitN(named.Name(), "/", 2)
 	if len(res) != 2 {
-		return false, fmt.Errorf("Error while identifying the registry of %s", image)
+		return false,fmt.Errorf("error while identifying the registry of %s", image)
 	}
 
 	for _, allowed := range whitelist {

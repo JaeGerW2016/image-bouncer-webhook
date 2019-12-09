@@ -37,7 +37,7 @@ type SlackRequestBody struct {
 
 func healthCheck(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Serving Request: %s", r.URL.Path)
-	fmt.Fprintf(w, "Ok")
+	w.WriteHeader(http.StatusOK)
 }
 
 func validateAdmissionReviewHandler(w http.ResponseWriter, r *http.Request) {
@@ -64,8 +64,9 @@ func validateAdmissionReviewHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("AdmissionReview Namespace: %s", namespace)
 
 	admissionResponse := v1beta1.AdmissionResponse{Allowed: true}
-	images := []string{}
-	initimages := []string{}
+	images := make([]string,2)
+	initImages := make([]string,2)
+
 
 	if !rules.IsWhitelistNamespace(whitelistedNamespaces, namespace) {
 		pod := v1.Pod{}
@@ -77,7 +78,7 @@ func validateAdmissionReviewHandler(w http.ResponseWriter, r *http.Request) {
 
 		// Handle InitContainers
 		for _, container := range pod.Spec.InitContainers {
-			initimages = append(initimages, container.Image)
+			initImages = append(initImages, container.Image)
 			usingLatest, err := rules.IsUsingLatestTag(container.Image)
 			if err != nil {
 				log.Printf("Error while parsing initimage name: %+v", err)
@@ -156,7 +157,7 @@ done:
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	w.Write(data)
+	_, _ = w.Write(data)
 }
 
 func SendSlackNotification(msg string) {
@@ -175,7 +176,7 @@ func SendSlackNotification(msg string) {
 		}
 
 		buf := new(bytes.Buffer)
-		buf.ReadFrom(resp.Body)
+		_,_ = buf.ReadFrom(resp.Body)
 		if buf.String() != "ok" {
 			log.Println("Non-ok response return from Slack")
 		}
