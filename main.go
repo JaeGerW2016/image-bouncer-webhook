@@ -63,7 +63,7 @@ func validateAdmissionReviewHandler(w http.ResponseWriter, r *http.Request) {
 	namespace := ar.Request.Namespace
 	log.Printf("AdmissionReview Namespace: %s", namespace)
 
-	admissionResponse := v1beta1.AdmissionResponse{Allowed: true}
+	admissionResponse := v1beta1.AdmissionResponse{Allowed: false}
 	images := make([]string,2)
 	initImages := make([]string,2)
 
@@ -86,7 +86,6 @@ func validateAdmissionReviewHandler(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if usingLatest {
-				admissionResponse.Allowed = false
 				message := fmt.Sprintf("InitContainer Images using latest tag are not allowed" + container.Image)
 				SendSlackNotification(message)
 				admissionResponse.Result = getInvalidContainerResponse(message)
@@ -100,7 +99,6 @@ func validateAdmissionReviewHandler(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				if !validRegistry {
-					admissionResponse.Allowed = false
 					message := fmt.Sprintf("InitContainer Image from a non whitelisted Registry" + container.Image)
 					SendSlackNotification(message)
 					admissionResponse.Result = getInvalidContainerResponse(message)
@@ -120,7 +118,6 @@ func validateAdmissionReviewHandler(w http.ResponseWriter, r *http.Request) {
 			}
 
 			if usingLatest {
-				admissionResponse.Allowed = false
 				message := fmt.Sprintf("Container Images using latest tag are not allowed" + container.Image)
 				SendSlackNotification(message)
 				admissionResponse.Result = getInvalidContainerResponse(message)
@@ -134,7 +131,6 @@ func validateAdmissionReviewHandler(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				if !validRegistry {
-					admissionResponse.Allowed = false
 					message := fmt.Sprintf("Container Image from a non whitelisted Registry" + container.Image)
 					SendSlackNotification(message)
 					admissionResponse.Result = getInvalidContainerResponse(message)
