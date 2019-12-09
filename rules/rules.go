@@ -21,7 +21,7 @@ func IsUsingLatestTag(image string) (bool, error) {
 		return false, err
 	}
 	str := reference.TagNameOnly(named).String()
-	return !strings.Contains(str,":") || strings.HasSuffix(str, ":latest"), nil
+	return strings.HasSuffix(str, ":latest"), nil
 }
 
 func IsFromWhiteListedRegistry(image string, whitelist []string) (bool, error) {
