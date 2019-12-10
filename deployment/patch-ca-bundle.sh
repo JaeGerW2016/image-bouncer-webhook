@@ -23,7 +23,7 @@ webhooks:
   failurePolicy: Ignore
   clientConfig:
     service:
-      name: image-bouncer-webhook-service
+      name: image-bouncer
       namespace: default
       path: "/validate"
     caBundle: ${CA_BUNDLE}

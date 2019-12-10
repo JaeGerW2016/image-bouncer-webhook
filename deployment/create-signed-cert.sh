@@ -42,7 +42,7 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
-[ -z ${service} ] && service=image-bouncer-webhook-service
+[ -z ${service} ] && service=image-bouncer
 [ -z ${secret} ] && secret=image-bouncer
 [ -z ${namespace} ] && namespace=default
 

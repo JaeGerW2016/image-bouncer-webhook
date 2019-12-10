@@ -11,19 +11,14 @@ import (
 	"k8s.io/api/admission/v1beta1"
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/klog"
-	"log"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 )
-
-
-type Config struct {
-	CertFile string
-	KeyFile  string
-}
 
 var (
 	whitelistNamespaces   = os.Getenv("WHITELIST_NAMESPACES")
@@ -33,156 +28,22 @@ var (
 	whitelistedRegistries = strings.Split(whitelistRegistries, ",")
 )
 
+var (
+	runtimeScheme = runtime.NewScheme()
+	codecs        = serializer.NewCodecFactory(runtimeScheme)
+	deserializer  = codecs.UniversalDeserializer()
+)
+
+type Config struct {
+	CertFile string
+	KeyFile  string
+}
+
 type SlackRequestBody struct {
 	Text string `json:"text"`
 }
 
-func healthCheck(w http.ResponseWriter, r *http.Request) {
-	klog.Fatalf("Serving Request: %s", r.URL.Path)
-	w.WriteHeader(http.StatusOK)
-}
-
-func validateAdmissionReviewHandler(w http.ResponseWriter, r *http.Request) {
-	klog.Fatalf("Serving Request: %s", r.URL.Path)
-	// set header
-	w.Header().Set("Content-Type", "application/json")
-
-	data, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		klog.Fatalln(err)
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	log.Println(string(data))
-	ar := v1beta1.AdmissionReview{}
-	if err := json.Unmarshal(data, &ar); err != nil {
-		klog.Fatalln(err)
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	namespace := ar.Request.Namespace
-	klog.Fatalf("AdmissionReview Namespace: %s", namespace)
-
-	admissionResponse := v1beta1.AdmissionResponse{Allowed: false}
-	images := make([]string,2)
-	initImages := make([]string,2)
-
-
-	if !rules.IsWhitelistNamespace(whitelistedNamespaces, namespace) {
-		pod := v1.Pod{}
-		if err := json.Unmarshal(ar.Request.Object.Raw, &pod); err != nil {
-			klog.Fatalln(err)
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		// Handle InitContainers
-		for _, container := range pod.Spec.InitContainers {
-			initImages = append(initImages, container.Image)
-			usingLatest, err := rules.IsUsingLatestTag(container.Image)
-			if err != nil {
-				klog.Fatalf("Error while parsing initimage name: %+v", err)
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-			if usingLatest {
-				message := fmt.Sprintf("InitContainer Images using latest tag are not allowed" + container.Image)
-				SendSlackNotification(message)
-				admissionResponse.Result = getInvalidContainerResponse(message)
-				goto done
-			}
-			if len(whitelistedRegistries) > 0 {
-				validRegistry, err := rules.IsFromWhiteListedRegistry(container.Image, whitelistedRegistries)
-				if err != nil {
-					klog.Fatalf("Error while looking for image registry: %+v", err)
-					w.WriteHeader(http.StatusBadRequest)
-					return
-				}
-				if !validRegistry {
-					message := fmt.Sprintf("InitContainer Image from a non whitelisted Registry" + container.Image)
-					SendSlackNotification(message)
-					admissionResponse.Result = getInvalidContainerResponse(message)
-					goto done
-				}
-			}
-		}
-
-		// Handle Containers
-		for _, container := range pod.Spec.Containers {
-			images = append(images, container.Image)
-			usingLatest, err := rules.IsUsingLatestTag(container.Image)
-			if err != nil {
-				klog.Fatalf("Error while parsing image name: %+v", err)
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-
-			if usingLatest {
-				message := fmt.Sprintf("Container Images using latest tag are not allowed" + container.Image)
-				SendSlackNotification(message)
-				admissionResponse.Result = getInvalidContainerResponse(message)
-				goto done
-			}
-			if len(whitelistedRegistries) > 0 {
-				validRegistry, err := rules.IsFromWhiteListedRegistry(container.Image, whitelistedRegistries)
-				if err != nil {
-					klog.Fatalf("Error while looking for image registry: %+v", err)
-					w.WriteHeader(http.StatusBadRequest)
-					return
-				}
-				if !validRegistry {
-					message := fmt.Sprintf("Container Image from a non whitelisted Registry" + container.Image)
-					SendSlackNotification(message)
-					admissionResponse.Result = getInvalidContainerResponse(message)
-					goto done
-				}
-			}
-		}
-	} else {
-		klog.Fatalf("Namespace is %s Whitelisted", namespace)
-	}
-done:
-	ar = v1beta1.AdmissionReview{
-		Response: &admissionResponse,
-	}
-
-	data, err = json.Marshal(ar)
-	if err != nil {
-		klog.Fatalln(err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(data)
-}
-
-func SendSlackNotification(msg string) {
-	if webhookUrl != "" {
-		slackBody, _ := json.Marshal(SlackRequestBody{Text: msg})
-		req, err := http.NewRequest(http.MethodPost, webhookUrl, bytes.NewBuffer(slackBody))
-		if err != nil {
-			klog.Fatalln(err)
-		}
-
-		req.Header.Add("Content-Type", "application/json")
-		client := &http.Client{Timeout: 10 * time.Second}
-		resp, err := client.Do(req)
-		if err != nil {
-			klog.Fatalln(err)
-		}
-
-		buf := new(bytes.Buffer)
-		_,_ = buf.ReadFrom(resp.Body)
-		if buf.String() != "ok" {
-			klog.Fatalln("Non-ok response return from Slack")
-		}
-		defer resp.Body.Close()
-	} else {
-		klog.Fatalln("Slack Webhook URL is not provided")
-	}
-}
+type admitFunc func(review v1beta1.AdmissionReview) *v1beta1.AdmissionResponse
 
 func getInvalidContainerResponse(message string) *metav1.Status {
 	return &metav1.Status{
@@ -205,6 +66,176 @@ func configTLS(config Config) *tls.Config {
 	}
 }
 
+func toAdmissionResponse(err error) *v1beta1.AdmissionResponse {
+	return &v1beta1.AdmissionResponse{
+		Result: &metav1.Status{
+			Message: err.Error(),
+		},
+	}
+}
+
+func SendSlackNotification(msg string) {
+	if webhookUrl != "" {
+		slackBody, _ := json.Marshal(SlackRequestBody{Text: msg})
+		req, err := http.NewRequest(http.MethodPost, webhookUrl, bytes.NewBuffer(slackBody))
+		if err != nil {
+			klog.Fatalln(err)
+		}
+
+		req.Header.Add("Content-Type", "application/json")
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			klog.Fatalln(err)
+		}
+
+		buf := new(bytes.Buffer)
+		_, _ = buf.ReadFrom(resp.Body)
+		if buf.String() != "ok" {
+			klog.Fatalln("Non-ok response return from Slack")
+		}
+		defer resp.Body.Close()
+	} else {
+		klog.Fatalln("Slack Webhook URL is not provided")
+	}
+}
+
+func apply(ar v1beta1.AdmissionReview) *v1beta1.AdmissionResponse {
+	klog.Info("Enetering apply in Image bouncer webhook")
+	podResource := metav1.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"}
+	if ar.Request.Resource == podResource {
+		raw := ar.Request.Object.Raw
+		pod := v1.Pod{}
+		if _, _, err := deserializer.Decode(raw, nil, &pod); err != nil {
+			klog.Error(err)
+			return toAdmissionResponse(err)
+		}
+		reviewResponse := v1beta1.AdmissionResponse{}
+		reviewResponse.Allowed = true
+
+		namespace := ar.Request.Namespace
+		klog.V(1).Infof("AdmissionReview Namespace: %s \n", namespace)
+		images := make([]string, 2)
+		initImage := make([]string, 2)
+
+		if !rules.IsWhitelistNamespace(whitelistedNamespaces, namespace) {
+			for _, container := range pod.Spec.InitContainers {
+				initImage = append(initImage, container.Image)
+				usingLatestTag, err := rules.IsUsingLatestTag(container.Image)
+				if err != nil {
+					klog.Errorf("Error while parsing initimage name: %+v", err)
+					return toAdmissionResponse(err)
+				}
+
+				if usingLatestTag {
+					message := fmt.Sprintf("InitContainer Images using latest tag are not allowed" + container.Image)
+					klog.Info(message)
+					SendSlackNotification(message)
+					reviewResponse.Result = getInvalidContainerResponse(message)
+					return &reviewResponse
+				}
+
+				if len(whitelistedRegistries) > 0 {
+					validRegistry, err := rules.IsFromWhiteListedRegistry(container.Image, whitelistedRegistries)
+					if err != nil {
+						klog.Errorf("Error while looking for image registry: %+v", err)
+						return toAdmissionResponse(err)
+					}
+
+					if !validRegistry {
+						message := fmt.Sprintf("InitContainer Image from a non whitelisted Registry" + container.Image)
+						klog.Info(message)
+						SendSlackNotification(message)
+						reviewResponse.Result = getInvalidContainerResponse(message)
+						return &reviewResponse
+					}
+				}
+			}
+
+			for _, container := range pod.Spec.Containers {
+				initImage = append(images, container.Image)
+				usingLatestTag, err := rules.IsUsingLatestTag(container.Image)
+				if err != nil {
+					klog.Errorf("Error while parsing image name: %+v", err)
+					return toAdmissionResponse(err)
+				}
+
+				if usingLatestTag {
+					message := fmt.Sprintf("Container Images using latest tag are not allowed" + container.Image)
+					klog.Info(message)
+					SendSlackNotification(message)
+					reviewResponse.Result = getInvalidContainerResponse(message)
+					return &reviewResponse
+				}
+
+				if len(whitelistedRegistries) > 0 {
+					validRegistry, err := rules.IsFromWhiteListedRegistry(container.Image, whitelistedRegistries)
+					if err != nil {
+						klog.Errorf("Error while looking for image registry: %+v", err)
+						return toAdmissionResponse(err)
+					}
+
+					if !validRegistry {
+						message := fmt.Sprintf("InitContainer Image from a non whitelisted Registry" + container.Image)
+						klog.Info(message)
+						SendSlackNotification(message)
+						reviewResponse.Result = getInvalidContainerResponse(message)
+						return &reviewResponse
+					}
+				}
+			}
+		}
+
+	}
+	return nil
+}
+
+func serve(w http.ResponseWriter, r *http.Request, admit admitFunc) {
+	var body []byte
+	if r.Body != nil {
+		if data, err := ioutil.ReadAll(r.Body); err == nil {
+			body = data
+		}
+	}
+
+	// verify the content type is accurate
+	contentType := r.Header.Get("Content-Type")
+	if contentType != "application/json" {
+		klog.Errorf("contentType=%s, expect application/json", contentType)
+		return
+	}
+
+	var reviewRespone *v1beta1.AdmissionResponse
+	ar := v1beta1.AdmissionReview{}
+	if _, _, err := deserializer.Decode(body, nil, &ar); err != nil {
+		klog.Error(err)
+		reviewRespone = toAdmissionResponse(err)
+	} else {
+		reviewRespone = admit(ar)
+	}
+
+	response := v1beta1.AdmissionReview{}
+	if reviewRespone != nil {
+		response.Response = reviewRespone
+		response.Response.UID = ar.Request.UID
+	}
+
+	ar.Request.Object = runtime.RawExtension{}
+	ar.Request.OldObject = runtime.RawExtension{}
+
+	resp, err := json.Marshal(response)
+	if err != nil {
+		klog.Error(err)
+	}
+	if _, err := w.Write(resp); err != nil {
+		klog.Error(err)
+	}
+}
+
+func serverIB(w http.ResponseWriter, r *http.Request) {
+	serve(w, r, apply)
+}
+
 func main() {
 	var config Config
 	flag.StringVar(&config.CertFile, "tls-cert", "/etc/admission-controller/tls/cert.pem", "TLS Certificate File.")
@@ -212,14 +243,13 @@ func main() {
 	flag.Parse()
 	klog.InitFlags(nil)
 
-	http.HandleFunc("/ping", healthCheck)
-	http.HandleFunc("/validate", validateAdmissionReviewHandler)
+	http.HandleFunc("/validate", serverIB)
 	s := &http.Server{
-		Addr: ":443",
+		Addr:      ":443",
 		TLSConfig: configTLS(config),
 	}
 	klog.Info(fmt.Sprintf("About to start serving webhooks: %#v", s))
-	if err := s.ListenAndServeTLS("",""); err != nil {
+	if err := s.ListenAndServeTLS("", ""); err != nil {
 		klog.Errorf("Failed to listen and server webhook server:%v", err)
 	}
 
