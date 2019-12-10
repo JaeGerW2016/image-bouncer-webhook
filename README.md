@@ -18,7 +18,7 @@ admissionregistration.k8s.io/v1beta1
 
 In addition, the `MutatingAdmissionWebhook` and `ValidatingAdmissionWebhook` admission controllers should be added and listed in the correct order in the admission-control flag of kube-apiserver.
 
-### Build and Push Tugger Docker Image
+### Build and Push Docker Image
 
 ```bash
 # Build docker image
@@ -28,7 +28,7 @@ docker build -t 314315960/image-bouncer:v1.0 .
 docker push 314315960/image-bouncer:v1.0
 ```
 
-### Generate TLS Certs for Tugger
+### Generate TLS Certs
 
 ```bash
 ./deployment/create-signed-cert.sh
