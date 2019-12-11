@@ -158,7 +158,7 @@ func apply(ar v1beta1.AdmissionReview) *v1beta1.AdmissionResponse {
 			if usingLatestTag {
 				message := fmt.Sprintf("Container Images using latest tag are not allowed " + container.Image)
 				klog.Info(message)
-				SendSlackNotification(message)
+				//SendSlackNotification(message)
 				reviewResponse.Allowed = false
 				reviewResponse.Result = getInvalidContainerResponse(message)
 				break
@@ -174,7 +174,7 @@ func apply(ar v1beta1.AdmissionReview) *v1beta1.AdmissionResponse {
 				if !validRegistry {
 					message := fmt.Sprintf("InitContainer Image from a non whitelisted Registry" + container.Image)
 					klog.Info(message)
-					SendSlackNotification(message)
+					//SendSlackNotification(message)
 					reviewResponse.Allowed = false
 					reviewResponse.Result = getInvalidContainerResponse(message)
 					break
