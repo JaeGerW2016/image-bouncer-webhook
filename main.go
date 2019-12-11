@@ -114,7 +114,7 @@ func apply(ar v1beta1.AdmissionReview) *v1beta1.AdmissionResponse {
 		reviewResponse.Allowed = true
 
 		namespace := ar.Request.Namespace
-		klog.V(1).Infof("AdmissionReview Namespace: %s \n", namespace)
+		klog.V(2).Infof("AdmissionReview Namespace: %s \n", namespace)
 		images := make([]string, 2)
 		initImage := make([]string, 2)
 
@@ -131,8 +131,9 @@ func apply(ar v1beta1.AdmissionReview) *v1beta1.AdmissionResponse {
 					message := fmt.Sprintf("InitContainer Images using latest tag are not allowed" + container.Image)
 					klog.Info(message)
 					SendSlackNotification(message)
+					reviewResponse.Allowed = false
 					reviewResponse.Result = getInvalidContainerResponse(message)
-					return &reviewResponse
+					break
 				}
 
 				if len(whitelistedRegistries) > 0 {
@@ -146,14 +147,15 @@ func apply(ar v1beta1.AdmissionReview) *v1beta1.AdmissionResponse {
 						message := fmt.Sprintf("InitContainer Image from a non whitelisted Registry" + container.Image)
 						klog.Info(message)
 						SendSlackNotification(message)
+						reviewResponse.Allowed = false
 						reviewResponse.Result = getInvalidContainerResponse(message)
-						return &reviewResponse
+						break
 					}
 				}
 			}
 
 			for _, container := range pod.Spec.Containers {
-				initImage = append(images, container.Image)
+				images = append(images, container.Image)
 				usingLatestTag, err := rules.IsUsingLatestTag(container.Image)
 				if err != nil {
 					klog.Errorf("Error while parsing image name: %+v", err)
@@ -164,8 +166,9 @@ func apply(ar v1beta1.AdmissionReview) *v1beta1.AdmissionResponse {
 					message := fmt.Sprintf("Container Images using latest tag are not allowed" + container.Image)
 					klog.Info(message)
 					SendSlackNotification(message)
+					reviewResponse.Allowed = false
 					reviewResponse.Result = getInvalidContainerResponse(message)
-					return &reviewResponse
+					break
 				}
 
 				if len(whitelistedRegistries) > 0 {
@@ -179,13 +182,21 @@ func apply(ar v1beta1.AdmissionReview) *v1beta1.AdmissionResponse {
 						message := fmt.Sprintf("InitContainer Image from a non whitelisted Registry" + container.Image)
 						klog.Info(message)
 						SendSlackNotification(message)
+						reviewResponse.Allowed = false
 						reviewResponse.Result = getInvalidContainerResponse(message)
-						return &reviewResponse
+						break
 					}
 				}
 			}
 		}
+		if reviewResponse.Allowed {
+			klog.Infof("All images accepted: %v %v",initImage, images)
+		} else {
+			klog.Infof("Rejected images: %v %v", initImage, images)
+		}
 
+		klog.Infof("admission response: %+v", reviewResponse)
+		return &reviewResponse
 	}
 	return nil
 }
