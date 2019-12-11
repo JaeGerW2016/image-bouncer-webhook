@@ -102,103 +102,102 @@ func SendSlackNotification(msg string) {
 
 func apply(ar v1beta1.AdmissionReview) *v1beta1.AdmissionResponse {
 	klog.Info("Enetering apply in Image bouncer webhook")
+	reviewResponse := v1beta1.AdmissionResponse{}
+	reviewResponse.Allowed = true
+
 	podResource := metav1.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"}
-	if ar.Request.Resource == podResource {
-		raw := ar.Request.Object.Raw
-		pod := v1.Pod{}
-		if _, _, err := deserializer.Decode(raw, nil, &pod); err != nil {
-			klog.Error(err)
-			return toAdmissionResponse(err)
-		}
-		reviewResponse := v1beta1.AdmissionResponse{}
-		reviewResponse.Allowed = true
-
-		namespace := ar.Request.Namespace
-		klog.V(2).Infof("AdmissionReview Namespace: %s \n", namespace)
-		images := make([]string, 2)
-		initImage := make([]string, 2)
-
-		if !rules.IsWhitelistNamespace(whitelistedNamespaces, namespace) {
-			for _, container := range pod.Spec.InitContainers {
-				initImage = append(initImage, container.Image)
-				usingLatestTag, err := rules.IsUsingLatestTag(container.Image)
-				if err != nil {
-					klog.Errorf("Error while parsing initimage name: %+v", err)
-					return toAdmissionResponse(err)
-				}
-
-				if usingLatestTag {
-					message := fmt.Sprintf("InitContainer Images using latest tag are not allowed" + container.Image)
-					klog.Info(message)
-					SendSlackNotification(message)
-					reviewResponse.Allowed = false
-					reviewResponse.Result = getInvalidContainerResponse(message)
-					break
-				}
-
-				if len(whitelistedRegistries) > 0 {
-					validRegistry, err := rules.IsFromWhiteListedRegistry(container.Image, whitelistedRegistries)
-					if err != nil {
-						klog.Errorf("Error while looking for image registry: %+v", err)
-						return toAdmissionResponse(err)
-					}
-
-					if !validRegistry {
-						message := fmt.Sprintf("InitContainer Image from a non whitelisted Registry" + container.Image)
-						klog.Info(message)
-						SendSlackNotification(message)
-						reviewResponse.Allowed = false
-						reviewResponse.Result = getInvalidContainerResponse(message)
-						break
-					}
-				}
-			}
-
-			for _, container := range pod.Spec.Containers {
-				images = append(images, container.Image)
-				usingLatestTag, err := rules.IsUsingLatestTag(container.Image)
-				if err != nil {
-					klog.Errorf("Error while parsing image name: %+v", err)
-					return toAdmissionResponse(err)
-				}
-
-				if usingLatestTag {
-					message := fmt.Sprintf("Container Images using latest tag are not allowed" + container.Image)
-					klog.Info(message)
-					SendSlackNotification(message)
-					reviewResponse.Allowed = false
-					reviewResponse.Result = getInvalidContainerResponse(message)
-					break
-				}
-
-				if len(whitelistedRegistries) > 0 {
-					validRegistry, err := rules.IsFromWhiteListedRegistry(container.Image, whitelistedRegistries)
-					if err != nil {
-						klog.Errorf("Error while looking for image registry: %+v", err)
-						return toAdmissionResponse(err)
-					}
-
-					if !validRegistry {
-						message := fmt.Sprintf("InitContainer Image from a non whitelisted Registry" + container.Image)
-						klog.Info(message)
-						SendSlackNotification(message)
-						reviewResponse.Allowed = false
-						reviewResponse.Result = getInvalidContainerResponse(message)
-						break
-					}
-				}
-			}
-		}
-		if reviewResponse.Allowed {
-			klog.Infof("All images accepted: %v %v",initImage, images)
-		} else {
-			klog.Infof("Rejected images: %v %v", initImage, images)
-		}
-
-		klog.Infof("admission response: %+v", reviewResponse)
-		return &reviewResponse
+	if ar.Request.Resource != podResource {
+		klog.Errorf("expect resource to be %s", podResource)
+		return nil
 	}
-	return nil
+	raw := ar.Request.Object.Raw
+	pod := v1.Pod{}
+	if _, _, err := deserializer.Decode(raw, nil, &pod); err != nil {
+		klog.Error(err)
+		return toAdmissionResponse(err)
+	}
+
+	namespace := ar.Request.Namespace
+	klog.V(2).Infof("AdmissionReview Namespace: %s \n", namespace)
+	images := make([]string, 2)
+	initImage := make([]string, 2)
+
+	if !rules.IsWhitelistNamespace(whitelistedNamespaces, namespace) {
+		for _, container := range pod.Spec.InitContainers {
+			initImage = append(initImage, container.Image)
+			usingLatestTag, err := rules.IsUsingLatestTag(container.Image)
+			if err != nil {
+				klog.Errorf("Error while parsing initimage name: %+v", err)
+				return toAdmissionResponse(err)
+			}
+			if usingLatestTag {
+				message := fmt.Sprintf("InitContainer Images using latest tag are not allowed" + container.Image)
+				klog.Info(message)
+				SendSlackNotification(message)
+				reviewResponse.Allowed = false
+				reviewResponse.Result = getInvalidContainerResponse(message)
+				break
+			}
+			if len(whitelistedRegistries) > 0 {
+				validRegistry, err := rules.IsFromWhiteListedRegistry(container.Image, whitelistedRegistries)
+				if err != nil {
+					klog.Errorf("Error while looking for image registry: %+v", err)
+					return toAdmissionResponse(err)
+				}
+
+				if !validRegistry {
+					message := fmt.Sprintf("InitContainer Image from a non whitelisted Registry" + container.Image)
+					klog.Info(message)
+					SendSlackNotification(message)
+					reviewResponse.Allowed = false
+					reviewResponse.Result = getInvalidContainerResponse(message)
+					break
+				}
+			}
+		}
+		for _, container := range pod.Spec.Containers {
+			images = append(images, container.Image)
+			usingLatestTag, err := rules.IsUsingLatestTag(container.Image)
+			if err != nil {
+				klog.Errorf("Error while parsing image name: %+v", err)
+				return toAdmissionResponse(err)
+			}
+
+			if usingLatestTag {
+				message := fmt.Sprintf("Container Images using latest tag are not allowed" + container.Image)
+				klog.Info(message)
+				SendSlackNotification(message)
+				reviewResponse.Allowed = false
+				reviewResponse.Result = getInvalidContainerResponse(message)
+				break
+			}
+
+			if len(whitelistedRegistries) > 0 {
+				validRegistry, err := rules.IsFromWhiteListedRegistry(container.Image, whitelistedRegistries)
+				if err != nil {
+					klog.Errorf("Error while looking for image registry: %+v", err)
+					return toAdmissionResponse(err)
+				}
+
+				if !validRegistry {
+					message := fmt.Sprintf("InitContainer Image from a non whitelisted Registry" + container.Image)
+					klog.Info(message)
+					SendSlackNotification(message)
+					reviewResponse.Allowed = false
+					reviewResponse.Result = getInvalidContainerResponse(message)
+					break
+				}
+			}
+		}
+	}
+	if reviewResponse.Allowed {
+		klog.Infof("All images accepted: %v %v",initImage, images)
+	} else {
+		klog.Infof("Rejected images: %v %v", initImage, images)
+	}
+
+	klog.Infof("admission response: %+v", reviewResponse)
+	return &reviewResponse
 }
 
 func serve(w http.ResponseWriter, r *http.Request, admit admitFunc) {
