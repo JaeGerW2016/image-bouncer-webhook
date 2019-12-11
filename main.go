@@ -224,15 +224,10 @@ func serve(w http.ResponseWriter, r *http.Request, admit admitFunc) {
 		reviewRespone = admit(ar)
 	}
 
-	response := v1beta1.AdmissionReview{}
-	if reviewRespone != nil {
-		response.Response = reviewRespone
-		response.Response.UID = ar.Request.UID
+	response := v1beta1.AdmissionReview{
+		Response: reviewRespone,
 	}
-
-	ar.Request.Object = runtime.RawExtension{}
-	ar.Request.OldObject = runtime.RawExtension{}
-
+	
 	resp, err := json.Marshal(response)
 	if err != nil {
 		klog.Error(err)
