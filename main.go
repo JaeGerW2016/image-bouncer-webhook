@@ -11,8 +11,6 @@ import (
 	"k8s.io/api/admission/v1beta1"
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/klog"
 	"net/http"
 	"os"
@@ -26,12 +24,6 @@ var (
 	webhookUrl            = os.Getenv("WEBHOOK_URL")
 	whitelistedNamespaces = strings.Split(whitelistNamespaces, ",")
 	whitelistedRegistries = strings.Split(whitelistRegistries, ",")
-)
-
-var (
-	runtimeScheme = runtime.NewScheme()
-	codecs        = serializer.NewCodecFactory(runtimeScheme)
-	deserializer  = codecs.UniversalDeserializer()
 )
 
 type Config struct {
@@ -112,7 +104,7 @@ func apply(ar v1beta1.AdmissionReview) *v1beta1.AdmissionResponse {
 	}
 	raw := ar.Request.Object.Raw
 	pod := v1.Pod{}
-	if _, _, err := deserializer.Decode(raw, nil, &pod); err != nil {
+	if err := json.Unmarshal(raw, &pod); err != nil {
 		klog.Error(err)
 		return toAdmissionResponse(err)
 	}
@@ -217,7 +209,7 @@ func serve(w http.ResponseWriter, r *http.Request, admit admitFunc) {
 
 	var reviewRespone *v1beta1.AdmissionResponse
 	ar := v1beta1.AdmissionReview{}
-	if _, _, err := deserializer.Decode(body, nil, &ar); err != nil {
+	if err := json.Unmarshal(body,&ar); err != nil {
 		klog.Error(err)
 		reviewRespone = toAdmissionResponse(err)
 	} else {
@@ -227,7 +219,7 @@ func serve(w http.ResponseWriter, r *http.Request, admit admitFunc) {
 	response := v1beta1.AdmissionReview{
 		Response: reviewRespone,
 	}
-	
+
 	resp, err := json.Marshal(response)
 	if err != nil {
 		klog.Error(err)
