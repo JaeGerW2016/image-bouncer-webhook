@@ -123,9 +123,9 @@ func apply(ar v1beta1.AdmissionReview) *v1beta1.AdmissionResponse {
 				return toAdmissionResponse(err)
 			}
 			if usingLatestTag {
-				message := fmt.Sprintf("InitContainer Images using latest tag are not allowed" + container.Image)
+				message := fmt.Sprintf("InitContainer Images using latest tag are not allowed " + container.Image)
 				klog.Info(message)
-				SendSlackNotification(message)
+				//SendSlackNotification(message)
 				reviewResponse.Allowed = false
 				reviewResponse.Result = getInvalidContainerResponse(message)
 				break
@@ -140,7 +140,7 @@ func apply(ar v1beta1.AdmissionReview) *v1beta1.AdmissionResponse {
 				if !validRegistry {
 					message := fmt.Sprintf("InitContainer Image from a non whitelisted Registry" + container.Image)
 					klog.Info(message)
-					SendSlackNotification(message)
+					//SendSlackNotification(message)
 					reviewResponse.Allowed = false
 					reviewResponse.Result = getInvalidContainerResponse(message)
 					break
@@ -156,7 +156,7 @@ func apply(ar v1beta1.AdmissionReview) *v1beta1.AdmissionResponse {
 			}
 
 			if usingLatestTag {
-				message := fmt.Sprintf("Container Images using latest tag are not allowed" + container.Image)
+				message := fmt.Sprintf("Container Images using latest tag are not allowed " + container.Image)
 				klog.Info(message)
 				SendSlackNotification(message)
 				reviewResponse.Allowed = false
@@ -183,7 +183,7 @@ func apply(ar v1beta1.AdmissionReview) *v1beta1.AdmissionResponse {
 		}
 	}
 	if reviewResponse.Allowed {
-		klog.Infof("All images accepted: %v %v",initImage, images)
+		klog.Infof("All images accepted: %v %v", initImage, images)
 	} else {
 		klog.Infof("Rejected images: %v %v", initImage, images)
 	}
@@ -209,7 +209,7 @@ func serve(w http.ResponseWriter, r *http.Request, admit admitFunc) {
 
 	var reviewRespone *v1beta1.AdmissionResponse
 	ar := v1beta1.AdmissionReview{}
-	if err := json.Unmarshal(body,&ar); err != nil {
+	if err := json.Unmarshal(body, &ar); err != nil {
 		klog.Error(err)
 		reviewRespone = toAdmissionResponse(err)
 	} else {
