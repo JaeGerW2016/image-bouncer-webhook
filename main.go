@@ -1,12 +1,12 @@
 package main
 
 import (
-	"bytes"
 	"crypto/tls"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"image-bouncer-webhook/rules"
+	"image-bouncer-webhook/slack"
 	"io/ioutil"
 	"k8s.io/api/admission/v1beta1"
 	"k8s.io/api/core/v1"
@@ -15,7 +15,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"time"
 )
 
 var (
@@ -29,10 +28,6 @@ var (
 type Config struct {
 	CertFile string
 	KeyFile  string
-}
-
-type SlackRequestBody struct {
-	Text string `json:"text"`
 }
 
 type admitFunc func(review v1beta1.AdmissionReview) *v1beta1.AdmissionResponse
@@ -66,32 +61,6 @@ func toAdmissionResponse(err error) *v1beta1.AdmissionResponse {
 	}
 }
 
-func SendSlackNotification(msg string) {
-	if webhookUrl != "" {
-		slackBody, _ := json.Marshal(SlackRequestBody{Text: msg})
-		req, err := http.NewRequest(http.MethodPost, webhookUrl, bytes.NewBuffer(slackBody))
-		if err != nil {
-			klog.Fatalln(err)
-		}
-
-		req.Header.Add("Content-Type", "application/json")
-		client := &http.Client{Timeout: 10 * time.Second}
-		resp, err := client.Do(req)
-		if err != nil {
-			klog.Fatalln(err)
-		}
-
-		buf := new(bytes.Buffer)
-		_, _ = buf.ReadFrom(resp.Body)
-		if buf.String() != "ok" {
-			klog.Fatalln("Non-ok response return from Slack")
-		}
-		defer resp.Body.Close()
-	} else {
-		klog.Fatalln("Slack Webhook URL is not provided")
-	}
-}
-
 func apply(ar v1beta1.AdmissionReview) *v1beta1.AdmissionResponse {
 	klog.Info("Enetering apply in Image bouncer webhook")
 	reviewResponse := v1beta1.AdmissionResponse{}
@@ -119,13 +88,17 @@ func apply(ar v1beta1.AdmissionReview) *v1beta1.AdmissionResponse {
 			initImage = append(initImage, container.Image)
 			usingLatestTag, err := rules.IsUsingLatestTag(container.Image)
 			if err != nil {
-				klog.Errorf("Error while parsing initimage name: %+v", err)
+				klog.Errorf("Error while parsing initimage name: %+v ", err)
 				return toAdmissionResponse(err)
 			}
 			if usingLatestTag {
 				message := fmt.Sprintf("InitContainer Images using latest tag are not allowed " + container.Image)
 				klog.Info(message)
-				//SendSlackNotification(message)
+				s := slack.NewSlackNotifier(webhookUrl)
+				err := s.NotifyPodTermination(pod)
+				if err != nil {
+					klog.Error(err)
+				}
 				reviewResponse.Allowed = false
 				reviewResponse.Result = getInvalidContainerResponse(message)
 				break
@@ -133,14 +106,18 @@ func apply(ar v1beta1.AdmissionReview) *v1beta1.AdmissionResponse {
 			if len(whitelistedRegistries) > 0 {
 				validRegistry, err := rules.IsFromWhiteListedRegistry(container.Image, whitelistedRegistries)
 				if err != nil {
-					klog.Errorf("Error while looking for image registry: %+v", err)
+					klog.Errorf("Error while looking for image registry: %+v ", err)
 					return toAdmissionResponse(err)
 				}
 
 				if !validRegistry {
-					message := fmt.Sprintf("InitContainer Image from a non whitelisted Registry" + container.Image)
+					message := fmt.Sprintf("InitContainer Image from a non whitelisted Registry " + container.Image)
 					klog.Info(message)
-					//SendSlackNotification(message)
+					s := slack.NewSlackNotifier(webhookUrl)
+					err := s.NotifyPodTermination(pod)
+					if err != nil {
+						klog.Error(err)
+					}
 					reviewResponse.Allowed = false
 					reviewResponse.Result = getInvalidContainerResponse(message)
 					break
@@ -158,7 +135,11 @@ func apply(ar v1beta1.AdmissionReview) *v1beta1.AdmissionResponse {
 			if usingLatestTag {
 				message := fmt.Sprintf("Container Images using latest tag are not allowed " + container.Image)
 				klog.Info(message)
-				//SendSlackNotification(message)
+				s := slack.NewSlackNotifier(webhookUrl)
+				err := s.NotifyPodTermination(pod)
+				if err != nil {
+					klog.Error(err)
+				}
 				reviewResponse.Allowed = false
 				reviewResponse.Result = getInvalidContainerResponse(message)
 				break
@@ -174,7 +155,11 @@ func apply(ar v1beta1.AdmissionReview) *v1beta1.AdmissionResponse {
 				if !validRegistry {
 					message := fmt.Sprintf("InitContainer Image from a non whitelisted Registry" + container.Image)
 					klog.Info(message)
-					//SendSlackNotification(message)
+					s := slack.NewSlackNotifier(webhookUrl)
+					err := s.NotifyPodTermination(pod)
+					if err != nil {
+						klog.Error(err)
+					}
 					reviewResponse.Allowed = false
 					reviewResponse.Result = getInvalidContainerResponse(message)
 					break
