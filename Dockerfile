@@ -12,6 +12,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o image-bouncer .
 
 FROM alpine:3.10
+RUN apk update && apk add ca-certificates && rm -rf /var/cache/apk/*
 WORKDIR /
 COPY --from=builder /go/release/image-bouncer .
 ENTRYPOINT ["/image-bouncer"]
